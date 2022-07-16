@@ -1,2 +1,2 @@
 # masterthesis
-large scale analysis of bacterial pan-immune system
+large scale data analysis of bacterial pan-immune system
