@@ -1,0 +1,161 @@
+#Blast for detect the targets of spacers
+#target on plasmid
+#target on virus genome
+#targt on ices
+#workflow:
+#The raw plasmid data is processed , the ices is also processed to have a short id. The code for processing the ID os ICEs is not provided here.
+#The spacers are extracted, all_spacers, spacers from orphan array and also the spacers from the near_cas CRISPRCas
+#Then blastn-short to blast the all_spacers againist three database, threshod is 95% identity and 95% coverage
+#FOr orphan array and near cas array the results are extracted.
+
+rule all:
+    input:"allsummary.txt"
+
+IDS,= glob_wildcards("../cctyper/cctyper_out/{spe}_out")
+
+print(IDS)
+
+
+rule make_database:
+    input:"spacers/all_spacers/{spe}"
+    output:directory("results/plasmid/{spe}")
+    shell:
+        """
+        makeblastdb -in all_viral.fna -dbtype nucl -parse_seqids -out allviral -title allviral
+        makeblastdb -in new_plasdb.fna -dbtype nucl -parse_seqids -out plasdb -title plasdb
+        makeblastdb -in data/defense_genes/defense1.ffn -dbtype nucl -parse_seqids -out database/denfense_genes/defense1 -title defense1
+        makeblastdb -in data/defense_genes/defense_gene2.faa -dbtype prot -parse_seqids -out database/denfense_genes/defense2 -title defense2
+        makeblastdb -in data/defense_genes/defense3.ffn -dbtype nucl -parse_seqids -out database/denfense_genes/defense3 -title defense3
+
+
+        mkdir -p -v {output}
+    	NAME=$(ls {input}/)
+
+        makeblastdb –in mydb.fsa –dbtype nucl –parse_seqids	-out
+        blastn -task "blastn-short" -db database/processed/viral/allviral -query spacers/all_spacers/Pseudomonas_aeruginosa/GCF_001606045.1_ASM160604v1_genomic/all.fa -outfmt 6 -out dd.txt
+        """
+
+
+
+rule blast_defense:
+    input:"spacers/spacers_nearcas/{spe}"
+    output:directory("results/defense2/{spe}")
+    shell:
+        """
+        mkdir -p -v {output}
+    	NAME=$(ls {input}/)
+        for i in $NAME;do
+            blastx  -db database/denfense_genes/defense2 -query {input}/$i/*.fa -outfmt "6 qseqid sseqid pident length mismatch qstart qend evalue  qcovs" -out {output}/$i.txt
+        done
+        """
+
+rule blast_defense1:
+    input:"spacers/spacers_nearcas/{spe}"
+    output:directory("results/defense1/{spe}")
+    shell:
+        """
+        mkdir -p -v {output}
+    	NAME=$(ls {input}/)
+        for i in $NAME;do
+            blastn -task "blastn-short" -db database/denfense_genes/defense1 -query {input}/$i/*.fa -outfmt "6 qseqid sseqid pident length mismatch qstart qend evalue  qcovs" -out {output}/$i.txt
+        done
+        """
+
+rule blast_defense3:
+    input:"spacers/spacers_nearcas/{spe}"
+    output:directory("results/defense3/{spe}")
+    shell:
+        """
+        mkdir -p -v {output}
+    	NAME=$(ls {input}/)
+        for i in $NAME;do
+            blastn -task "blastn-short" -db database/denfense_genes/defense3 -query {input}/$i/*.fa -outfmt "6 qseqid sseqid pident length mismatch qstart qend evalue  qcovs" -out {output}/$i.txt
+        done
+        """
+
+
+
+rule de_summary:
+    input:
+        all=expand("results/defense3/{spe}",spe=IDS,)
+    output:
+        "de3summary.txt"
+    shell:
+        """
+
+        ls {input} >{output}
+        """
+
+
+
+
+rule densense_analysis:
+    input:
+        "results/defense1/{spe}",
+        "results/defense3a/{spe}"
+
+    output:"summary/defense/{spe}.txt"
+    script:
+        "blast_count_defense.R"
+
+rule dean_sum:
+    input:
+        all=expand("summary/defense/{spe}.txt",spe=IDS,)
+    output:
+        "adsummary.txt"
+    shell:
+        """
+        ls {input} >{output}
+        """
+
+
+
+
+
+rule all_spacers_analysis:
+    input:
+        "results/all_spacers/blast_plasmid/{spe}",
+        "results/all_spacers/blast_ices/{spe}",
+        "results/all_spacers/blast_viral/{spe}"
+
+    output:"summary/all_spacers/{spe}.txt"
+    script:
+        "blast_count.R"
+
+
+rule orphan_spacers_analysis:
+    input:
+        "results/all_spacers/blast_plasmid/{spe}",
+        "results/all_spacers/blast_ices/{spe}",
+        "results/all_spacers/blast_viral/{spe}",
+        "spacers/orphan_spacer_list/{spe}.txt"
+    output:"summary/orphan_spacers/{spe}.txt"
+    script:
+        "blast_count2.R"
+
+
+rule nearcas_spacers_analysis:
+    input:
+        "results/all_spacers/blast_plasmid/{spe}",
+        "results/all_spacers/blast_ices/{spe}",
+        "results/all_spacers/blast_viral/{spe}",
+        "spacers/spacers_nearcas_list/{spe}.txt"
+    output:"summary/nearcas_spacers/{spe}.txt"
+    script:
+        "blast_count2.R"
+
+
+rule all_summary:
+    input:
+        all=expand("summary/all_spacers/{spe}.txt",spe=IDS,),
+        orphan=expand("summary/orphan_spacers/{spe}.txt",spe=IDS,),
+        nearcas=expand("summary/nearcas_spacers/{spe}.txt",spe=IDS,),
+    output:
+        "allsummary.txt"
+    shell:
+        """
+            cat {input.all}> summary/all.txt
+            cat {input.orphan}> summary/orphan.txt
+            cat {input.nearcas}> summary/nearcas.txt
+            cat {input} >{output}
+        """

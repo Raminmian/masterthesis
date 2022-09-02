@@ -1,0 +1,131 @@
+
+
+
+##This pipeline could be much simpler, Here I use a lot of checkpoints to enhance my understanding of checkpoints
+
+
+
+configfile: "config.yaml"
+
+import seaborn as sns
+import pandas as pd
+from collections import Counter
+
+print(config["choices"]["numOfSpe"])
+rule all:
+	input: "summary.txt"
+
+
+#To check the number of species with the customized parameters
+#extract the information of selected species and their dowloading url links
+checkpoint extract_spe_list:
+     input:
+            "input_data/allgenomeold.csv"
+     output:
+            directory("genome_data")
+     params:
+            topn=config["choices"]["numOfSpe"],
+            nscafolds=config["choices"]["nscafolds"]
+     run:
+        topnum=list({params.topn})[0]
+        pd.set_option('chained',None)
+        df = pd.read_csv(input[0])
+
+        df=df[df["Scaffolds"]<params.nscafolds]
+        df = df[df['RefSeq FTP'].notna()]
+        print(df.shape)
+        num=df.shape[0]
+        nftp=df.iloc[:,[0,2,15,7,8]]
+        name=nftp.iloc[:,0]
+        for i in range(0,num-1):
+            dd=name.iloc[i].split(" ")[0:2]
+            if len(dd)<=1:
+                newname=dd[0]
+            else:
+                newname=dd[0]+(' ')+dd[1]
+            nftp.iloc[i,0]=newname
+        #count which name is not common
+        c=Counter(nftp.iloc[:,0])
+        mostcommon=c.most_common()
+        topn=mostcommon[0:topnum]
+        shell("""
+			mkdir {output};
+			mkdir -p -v results/extracted_data_description
+			""")
+        shell("mkdir -p -v results/plots/distribution_of_genomesize")
+        allspe=nftp[nftp['#Organism Name'].str.contains(f"{topn[1][0]}")]
+        for i in range(topnum):
+            adc=nftp[nftp['#Organism Name'].str.contains(f"{topn[i][0]}")]
+            adc["#Organism Name"]=[nftp['#Organism Name'].iloc[1].replace(" ", "_") for i in range(len(adc))]
+            adc.to_csv("results/extracted_data_description/{}.csv".format((topn[i][0]).replace(" ","_")))
+            # do plots
+            sns.displot(adc, x="Size(Mb)", kind="kde").set(title="{} N={}".format(topn[i][0],len(adc))).savefig('results/plots/distribution_of_genomesize/{}'.format(topn[i][0]))
+            a1= "genome_data/{}".format(topn[i][0]).replace(" ","_")
+            shell("mkdir -p {a1}")
+            textfile = open("genome_data/{}.txt".format((topn[i][0]).replace(" ","_")), "w")
+
+            sites=[adc.iloc[i,2]+"/"+adc.iloc[i,2].split("/")[-1]+"_genomic.fna.gz" for i in range(len(adc))]
+            for element in sites[0:1]:
+                textfile.write(element + "\n")
+            textfile.close()
+            if(i>=1):
+                allspe=allspe.append(adc)
+		allspe.to_csv("results/extracted_data_description/allspe.csv")
+
+
+
+checkpoint download_genome:
+    input:
+        "genome_data/{spi}.txt"
+    output:
+        directory("genome_data/{spi}")
+    wildcard_constraints:
+          spi="\w+_\w+"
+    shell:
+        """
+        wget -i {input} -P {output};
+        gunzip {output}/*.gz
+        """
+
+def get_species(wildcards):
+     checkpoint_output = checkpoints.extract_spe_list.get(**wildcards).output[0]
+     return expand("genome_data/{i}",
+                    i=glob_wildcards(os.path.join(checkpoint_output, "{i}.txt")).i)
+
+
+checkpoint generate_species_list:
+    input:
+         get_species
+    output:
+        "results/extracted_data_description/fnalist.txt"
+    shell:
+         """find genome_data/|grep "fna"|cut -d "/" -f 2,3|awk -F "_genomic.fna" ' {{print $1}}' >{output}"""
+
+rule runcctyper:
+    input:
+         "genome_data/{aa}_genomic.fna"
+    output:
+        directory( "results/cctyper/{aa}")
+    conda:
+    	"envs/cctyper.yaml"
+    shell:
+         """
+       cctyper {input} {output};
+
+         """
+
+
+def get_species_list(wildcards):
+     a1=checkpoints.generate_species_list.get(**wildcards).output[0]
+     ad=open(a1,"r")
+     ae=ad.readlines()
+     a2=["results/cctyper/" + i.replace("\n","") for i in ae]
+     return  a2
+
+rule summary:
+    input:
+         a2
+    output:
+        "summary.txt"
+    shell:
+         """ls {input} >{output}"""

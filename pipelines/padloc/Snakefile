@@ -1,0 +1,71 @@
+rule all:
+	input: "summary.txt"
+
+IDS,= glob_wildcards("padloc_output/{spe}_out")
+print(IDS,)
+
+import glob
+files=glob.glob("padloc_output/plasmid/*")
+plasmid_ID=[file.split("/")[2] for file in files]
+print(plasmid_ID)
+
+rule read_results:
+	input:"padloc_output/{spe}_out"
+	output:directory("padloc_summary/{spe}_summary")
+	shell:
+		"""
+	NAME=$(ls {input}/)
+	mkdir -p -v {output}
+    for i in $NAME;do
+		echo $i >>{output}/systems.txt
+		if [ $(ls {input}/$i|wc -l ) -gt 4 ]
+		then
+			cat {input}/$i/*.csv| cut -d "," -f 1,3 |awk "NR>1" >>{output}/systems.txt
+		fi
+	done
+		"""
+
+rule denfense_genes_count:
+     input:
+            "padloc_summary/{spe}_summary"
+     output:
+            "defense_count/{spe}.csv"
+     script:
+        	"system_count.py"
+
+rule count_per_genome:
+	input:"padloc_output/{spe}_out"
+	output:"per_size/{spe}.csv"
+	shell:
+		"""
+	NAME=$(ls {input}/)
+	mkdir -p -v per_size/
+    for i in $NAME;do
+	  if [ $(ls {input}/$i|wc -l ) -gt 4 ]
+	  then
+			ID=$(echo $i |awk -F .genomi ' {{print $1}}')
+			CC=$(cat {input}/$i/*.csv |cut -d "," -f 12,13 |awk "NR>1"|awk -F, '{{print $2-$1}}' |awk '{{s+=$1}}END{{print s}}')
+			echo $ID","$CC >>{output}
+	  fi
+	done
+		"""
+
+
+rule sum_gene_size:
+    input: expand("per_size/{spe}.csv",spe=IDS,)
+	output: "gensummary.txt"
+	shell:
+			"""
+			ls  {input} >{output}
+			cat per_size/*.csv >per_size/all_denfense_size.csv
+			"""
+
+
+
+rule mmeall:
+     input:
+            expand("defense_count/{spe}.csv",spe=IDS,)
+     output:
+            "defense_count/allspe.csv"
+     shell:
+        	"cat {input} >> {output}"

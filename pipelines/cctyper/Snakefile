@@ -1,0 +1,203 @@
+rule all:
+     input:"summary.txt"
+
+IDS,= glob_wildcards("cctyper_out/{spe}_out")
+print(IDS,)
+import os
+plasmidID=os.listdir(os.getcwd()+"/cctyper_out/onlyplasmid")
+chromoID=os.listdir(os.getcwd()+"/cctyper_out/chromo")
+
+print(plasmidID)
+
+rule cctyper_out:
+    input:"cctyper_out/{spe}_out"
+    output:directory("cctyper_result/{spe}")
+    shell:
+        """
+        mkdir -p final_out
+    	NAME=$(ls {input}/)
+    	mkdir -p -v {output}
+        echo "ID" ";" "CRISPRCas" ";" "Cas" ";" "CRISPR" ";" "type" ";" "all_Spacer" ";" "near_Spacer">>{output}/summary.txt
+        for i in $NAME;do
+            CRISPRCas=$(ls {input}/$i/|grep "CRISPR_Cas.tab"|wc -m ||true)
+            Cas=$(ls {input}/$i/|grep "cas_operons.tab"|wc -m ||true)
+            CRISPR=$(ls {input}/$i/|grep "crisprs_all.tab"|wc -m ||true)
+            ID=$(echo $i |awk -F .genomi ' {{print $1}}')
+            spacer="0"
+            if [ $(ls {input}/$i/|grep "spacer"|wc -l ||true) -gt 0 ];
+            then
+                spacer=$(cat {input}/$i/spacers/*.fa|grep ">"|wc -l)
+            fi
+            near_spacer=$spacer
+            if [ $(ls {input}/$i/|grep "crisprs_near_cas.tab" |wc -l ||true) -gt 0 ];
+            then
+                nn=$(cat {input}/$i/crisprs_near_cas.tab | awk "NR>1" |cut -d$"\t" -f 2|awk '{{print $0 ".fa "}}')
+                cd {input}/$i/spacers
+                near_spacer=$(cat $nn|grep ">"|wc -l)
+                cd ../../../..
+            fi
+            if [ $CRISPRCas -gt 1 ];
+            then
+                type=$(cat {input}/$i/CRISPR_Cas.tab |cut -d$"\t" -f 4 |awk "NR>1"|awk -v ORS="|" 1 ||true)
+                echo $ID";"$CRISPRCas";"$Cas";"$CRISPR";"$type";"$spacer";"$near_spacer >>{output}/summary.txt
+            else
+                echo $ID";"$CRISPRCas";"$Cas";"$CRISPR";" "NA" ";" $spacer";"$near_spacer >>{output}/summary.txt
+            fi
+
+
+        done
+        """
+rule make_csv:
+    input:
+        "cctyper_result/{spe}",
+        "../species_selection/{spe}.csv"
+    output:"final_out/{spe}.csv"
+    script:
+        "data_merge.R"
+
+
+
+
+rule plasmid_cctyper_out:
+    input:"cctyper_out/onlyplasmid/{spe}"
+    output:directory("cctyper_result/onlyplasmid/{spe}")
+    shell:
+        """
+        mkdir -p -v final_out/onlyplasmid
+    	NAME=$(ls {input}/)
+    	mkdir -p -v {output}
+        echo "ID" ";" "CRISPRCas" ";" "Cas" ";" "CRISPR" ";" "type" ";" "all_Spacer" ";" "near_Spacer">>{output}/summary.txt
+        for i in $NAME;do
+            CRISPRCas=$(ls {input}/$i/|grep "CRISPR_Cas.tab"|wc -m ||true)
+            Cas=$(ls {input}/$i/|grep "cas_operons.tab"|wc -m ||true)
+            CRISPR=$(ls {input}/$i/|grep "crisprs_all.tab"|wc -m ||true)
+            ID=$(echo $i |awk -F .genomi ' {{print $1}}')
+            spacer="0"
+            if [ $(ls {input}/$i/|grep "spacer"|wc -l ||true) -gt 0 ];
+            then
+                spacer=$(cat {input}/$i/spacers/*.fa|grep ">"|wc -l)
+            fi
+            near_spacer=$spacer
+            if [ $(ls {input}/$i/|grep "crisprs_near_cas.tab" |wc -l ||true) -gt 0 ];
+            then
+                nn=$(cat {input}/$i/crisprs_near_cas.tab | awk "NR>1" |cut -d$"\t" -f 2|awk '{{print $0 ".fa "}}')
+                cd {input}/$i/spacers
+                near_spacer=$(cat $nn|grep ">"|wc -l)
+                cd ../../../../..
+            fi
+            if [ $CRISPRCas -gt 1 ];
+            then
+                type=$(cat {input}/$i/CRISPR_Cas.tab |cut -d$"\t" -f 4 |awk "NR>1"|awk -v ORS="|" 1 ||true)
+                echo $ID";"$CRISPRCas";"$Cas";"$CRISPR";"$type";"$spacer";"$near_spacer >>{output}/summary.txt
+            else
+                echo $ID";"$CRISPRCas";"$Cas";"$CRISPR";" "NA" ";" $spacer";"$near_spacer >>{output}/summary.txt
+            fi
+
+
+        done
+        """
+
+
+rule chromo_cctyper_out:
+    input:"cctyper_out/chromo/{spe}"
+    output:directory("cctyper_result/chromo/{spe}")
+    shell:
+        """
+        mkdir -p -v final_out/chromo
+    	NAME=$(ls {input}/)
+    	mkdir -p -v {output}
+        echo "ID" ";" "CRISPRCas" ";" "Cas" ";" "CRISPR" ";" "type" ";" "all_Spacer" ";" "near_Spacer">>{output}/summary.txt
+        for i in $NAME;do
+            CRISPRCas=$(ls {input}/$i/|grep "CRISPR_Cas.tab"|wc -m ||true)
+            Cas=$(ls {input}/$i/|grep "cas_operons.tab"|wc -m ||true)
+            CRISPR=$(ls {input}/$i/|grep "crisprs_all.tab"|wc -m ||true)
+            ID=$(echo $i |awk -F .genomi ' {{print $1}}')
+            spacer="0"
+            if [ $(ls {input}/$i/|grep "spacer"|wc -l ||true) -gt 0 ];
+            then
+                spacer=$(cat {input}/$i/spacers/*.fa|grep ">"|wc -l)
+            fi
+            near_spacer=$spacer
+            if [ $(ls {input}/$i/|grep "crisprs_near_cas.tab" |wc -l ||true) -gt 0 ];
+            then
+                nn=$(cat {input}/$i/crisprs_near_cas.tab | awk "NR>1" |cut -d$"\t" -f 2|awk '{{print $0 ".fa "}}')
+                cd {input}/$i/spacers
+                near_spacer=$(cat $nn|grep ">"|wc -l)
+                cd ../../../../..
+            fi
+            if [ $CRISPRCas -gt 1 ];
+            then
+                type=$(cat {input}/$i/CRISPR_Cas.tab |cut -d$"\t" -f 4 |awk "NR>1"|awk -v ORS="|" 1 ||true)
+                echo $ID";"$CRISPRCas";"$Cas";"$CRISPR";"$type";"$spacer";"$near_spacer >>{output}/summary.txt
+            else
+                echo $ID";"$CRISPRCas";"$Cas";"$CRISPR";" "NA" ";" $spacer";"$near_spacer >>{output}/summary.txt
+            fi
+
+
+        done
+        """
+
+
+
+rule chromo_make_csv:
+    input:
+        "cctyper_result/chromo/{spe}",
+        "../species_selection/{spe}.csv"
+    output:"final_out/chromo/{spe}.csv"
+    script:
+        "data_merge.R"
+
+
+rule plasmid_make_csv:
+    input:
+        "cctyper_result/onlyplasmid/{spe}",
+        "../species_selection/{spe}.csv"
+    output:"final_out/onlyplasmid/{spe}.csv"
+    script:
+        "data_merge.R"
+
+
+
+
+
+
+
+rule all_summary:
+	input:expand("final_out/{spe}.csv",spe=IDS,)
+	output: "final_out/all_allspe.csv"
+	shell:
+		"""
+		cat {input}>{output}
+		"""
+
+
+
+
+rule chromo_summary:
+	input:expand("final_out/chromo/{spe}.csv",spe=chromoID)
+	output: "final_out/chromo/chromo_allspe.csv"
+	shell:
+		"""
+		cat {input}>{output}
+		"""
+
+
+rule plasmidsummary:
+	input:expand("final_out/onlyplasmid/{spe}.csv",spe=plasmidID)
+	output: "final_out/onlyplasmid/plas_allspe.csv"
+	shell:
+		"""
+		cat {input}>{output}
+		"""
+
+
+rule summary:
+	input:
+         "final_out/onlyplasmid/plas_allspe.csv",
+          "final_out/chromo/chromo_allspe.csv",
+         "final_out/all_allspe.csv"
+	output: "summary.txt"
+	shell:
+		"""
+		ls {input}>{output}
+		"""

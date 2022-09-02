@@ -1,0 +1,52 @@
+#This pipeline is prepared for analysis the output of acrfinder
+#Before run this pipeline, pull the imagine firstly
+rule all:
+    input:"summary.txt"
+
+IDS,= glob_wildcards("acrfinder_output/{spe}_out")
+print(IDS,)
+
+
+rule read_output:
+    input:"acrfinder_output/{spe}_out"
+    output:directory("intermediate/{spe}")
+    params:
+    shell:
+            """
+            mkdir -p -v {output}
+        	NAME=$(ls {input}/)
+            for i in $NAME;do
+        		if [ $(ls {input}/$i/output_dir|grep "homology"  |wc -l ) -gt 0 ]
+        		then
+                    echo $i >>{output}/acr_homology.txt
+        			cat {input}/$i/output_dir/*based.out|grep -o "Acr[0-9,A-Z]*"|awk 'NR>=2' >>{output}/acr_homology.txt
+        		fi
+    		if [ $(ls {input}/$i/output_dir|grep "_association"  |wc -l ) -gt 0 ]
+    		then
+
+    		    LOW=$(cat {input}/$i/output_dir/*_association.out|grep "Low Confidence"|grep -o "Acr[0-9,A-Z]*"|awk -v ORS=";" 1 |awk 'BEGIN{{FS=OFS="|"}}{{print "Low Confidence" OFS  $0  }}'||true)
+    		    MEDIUM=$(cat {input}/$i/output_dir/*_association.out|grep "Medium Confidence"|grep -o "Acr[0-9,A-Z]*"|awk -v ORS=";" 1 |awk 'BEGIN{{FS=OFS="|"}}{{print "Medium Confidence" OFS  $0  }}'||true)
+    		    HIGH=$(cat {input}/$i/output_dir/*_association.out|grep "High Confidence"|grep -o "Acr[0-9,A-Z]*"|awk -v ORS=";" 1 |awk 'BEGIN{{FS=OFS="|"}}{{print "High Confidence" OFS  $0  }}'||true)
+                echo $i"|"$LOW >>{output}/acr_association.txt
+                echo $i"|"$MEDIUM >>{output}/acr_association.txt
+                echo $i"|"$HIGH >>{output}/acr_association.txt
+
+    		fi
+        	done
+            """
+
+rule result_analysis:
+    input:"intermediate/{spe}"
+    output:"final_out/{spe}.csv"
+    script:
+        "acr_analysis.R"
+
+
+
+rule summary:
+	input:expand("final_out/{spe}.csv",spe=IDS,)
+	output: "summary.txt"
+	shell:
+		"""
+		ls {input}>{output}
+		"""
